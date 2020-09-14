@@ -98,11 +98,12 @@ public class ProtocolV1Decoder extends LengthFieldBasedFrameDecoder {
     public Object decodeFrame(ByteBuf frame) {
         byte b0 = frame.readByte();
         byte b1 = frame.readByte();
+        // 魔术位2byte: 11011010 11011010
         if (ProtocolConstants.MAGIC_CODE_BYTES[0] != b0
                 || ProtocolConstants.MAGIC_CODE_BYTES[1] != b1) {
             throw new IllegalArgumentException("Unknown magic code: " + b0 + ", " + b1);
         }
-
+        // 协议版本1byte: 00000001
         byte version = frame.readByte();
         // TODO  check version compatible here
 
@@ -122,10 +123,10 @@ public class ProtocolV1Decoder extends LengthFieldBasedFrameDecoder {
         // direct read head with zero-copy
         int headMapLength = headLength - ProtocolConstants.V1_HEAD_LENGTH;
         if (headMapLength > 0) {
+            // 消息的map进行反序列化
             Map<String, String> map = HeadMapSerializer.getInstance().decode(frame, headMapLength);
             rpcMessage.getHeadMap().putAll(map);
         }
-
         // read body
         if (messageType == ProtocolConstants.MSGTYPE_HEARTBEAT_REQUEST) {
             rpcMessage.setBody(HeartbeatMessage.PING);
@@ -137,8 +138,10 @@ public class ProtocolV1Decoder extends LengthFieldBasedFrameDecoder {
                 byte[] bs = new byte[bodyLength];
                 frame.readBytes(bs);
                 Compressor compressor = CompressorFactory.getCompressor(compressorType);
+                // body解压
                 bs = compressor.decompress(bs);
                 Serializer serializer = EnhancedServiceLoader.load(Serializer.class, SerializerType.getByCode(rpcMessage.getCodec()).name());
+                // body反序列化
                 rpcMessage.setBody(serializer.deserialize(bs));
             }
         }
