@@ -162,7 +162,9 @@ public class NettyServerBootstrap implements RemotingBootstrap {
     @Override
     public void shutdown() {
         try {
-            LOGGER.info("Shutting server down. ");
+            if (LOGGER.isDebugEnabled()) {
+                LOGGER.debug("Shutting server down. ");
+            }
             if (initialized.get()) {
                 RegistryFactory.getInstance().unregister(new InetSocketAddress(XID.getIpAddress(), XID.getPort()));
                 RegistryFactory.getInstance().close();

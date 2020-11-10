@@ -57,37 +57,37 @@ public class RegTmProcessor implements RemotingProcessor {
         onRegTmMessage(ctx, rpcMessage);
     }
 
-private void onRegTmMessage(ChannelHandlerContext ctx, RpcMessage rpcMessage) {
-    RegisterTMRequest message = (RegisterTMRequest) rpcMessage.getBody();
-    String ipAndPort = NetUtil.toStringAddress(ctx.channel().remoteAddress());
-    Version.putChannelVersion(ctx.channel(), message.getVersion());
-    boolean isSuccess = false;
-    String errorInfo = StringUtils.EMPTY;
-    try {
-        if (null == checkAuthHandler || checkAuthHandler.regTransactionManagerCheckAuth(message)) {
-            // 注册TM Channel，用于做以后的TM通知
-            ChannelManager.registerTMChannel(message, ctx.channel());
-            Version.putChannelVersion(ctx.channel(), message.getVersion());
-            isSuccess = true;
-            if (LOGGER.isDebugEnabled()) {
-                LOGGER.debug("checkAuth for client:{},vgroup:{},applicationId:{}",
-                    ipAndPort, message.getTransactionServiceGroup(), message.getApplicationId());
+    private void onRegTmMessage(ChannelHandlerContext ctx, RpcMessage rpcMessage) {
+        RegisterTMRequest message = (RegisterTMRequest) rpcMessage.getBody();
+        String ipAndPort = NetUtil.toStringAddress(ctx.channel().remoteAddress());
+        Version.putChannelVersion(ctx.channel(), message.getVersion());
+        boolean isSuccess = false;
+        String errorInfo = StringUtils.EMPTY;
+        try {
+            if (null == checkAuthHandler || checkAuthHandler.regTransactionManagerCheckAuth(message)) {
+                // 注册TM Channel，用于做以后的TM通知
+                ChannelManager.registerTMChannel(message, ctx.channel());
+                Version.putChannelVersion(ctx.channel(), message.getVersion());
+                isSuccess = true;
+                if (LOGGER.isDebugEnabled()) {
+                    LOGGER.debug("checkAuth for client:{},vgroup:{},applicationId:{}",
+                        ipAndPort, message.getTransactionServiceGroup(), message.getApplicationId());
+                }
             }
+        } catch (Exception exx) {
+            isSuccess = false;
+            errorInfo = exx.getMessage();
+            LOGGER.error("TM register fail, error message:{}", errorInfo);
         }
-    } catch (Exception exx) {
-        isSuccess = false;
-        errorInfo = exx.getMessage();
-        LOGGER.error("TM register fail, error message:{}", errorInfo);
+        RegisterTMResponse response = new RegisterTMResponse(isSuccess);
+        if (StringUtils.isNotEmpty(errorInfo)) {
+            response.setMsg(errorInfo);
+        }
+        remotingServer.sendAsyncResponse(rpcMessage, ctx.channel(), response);
+        if (LOGGER.isInfoEnabled()) {
+            LOGGER.info("TM register success,message:{},channel:{},client version:{}", message, ctx.channel(),
+                message.getVersion());
+        }
     }
-    RegisterTMResponse response = new RegisterTMResponse(isSuccess);
-    if (StringUtils.isNotEmpty(errorInfo)) {
-        response.setMsg(errorInfo);
-    }
-    remotingServer.sendAsyncResponse(rpcMessage, ctx.channel(), response);
-    if (LOGGER.isInfoEnabled()) {
-        LOGGER.info("TM register success,message:{},channel:{},client version:{}", message, ctx.channel(),
-            message.getVersion());
-    }
-}
 
 }

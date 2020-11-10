@@ -262,55 +262,55 @@ public abstract class AbstractNettyRemoting implements Disposable {
      * @throws Exception throws exception process message error.
      * @since 1.3.0
      */
-protected void processMessage(ChannelHandlerContext ctx, RpcMessage rpcMessage) throws Exception {
-    if (LOGGER.isDebugEnabled()) {
-        LOGGER.debug(String.format("%s msgId:%s, body:%s", this, rpcMessage.getId(), rpcMessage.getBody()));
-    }
-    Object body = rpcMessage.getBody();
-    if (body instanceof MessageTypeAware) {
-        MessageTypeAware messageTypeAware = (MessageTypeAware) body;
-        // 根据messageType获取对应的处理器和线程池，processorTable 在 netty.init 时会初始化
-        final Pair<RemotingProcessor, ExecutorService> pair = this.processorTable.get((int) messageTypeAware.getTypeCode());
-        if (pair != null) {
+    protected void processMessage(ChannelHandlerContext ctx, RpcMessage rpcMessage) throws Exception {
+        if (LOGGER.isDebugEnabled()) {
+            LOGGER.debug(String.format("%s msgId:%s, body:%s", this, rpcMessage.getId(), rpcMessage.getBody()));
+        }
+        Object body = rpcMessage.getBody();
+        if (body instanceof MessageTypeAware) {
+            // 根据messageType获取对应的处理器和线程池，processorTable 在 netty.init 时会初始化
+            MessageTypeAware messageTypeAware = (MessageTypeAware) body;
+            final Pair<RemotingProcessor, ExecutorService> pair = this.processorTable.get((int) messageTypeAware.getTypeCode());
             // 判断该Pair是否有初始化线程池，如果有就用业务线程池执行，否则直接执行
-            if (pair.getSecond() != null) {
-                try {
-                    pair.getSecond().execute(() -> {
-                        try {
-                            pair.getFirst().process(ctx, rpcMessage);
-                        } catch (Throwable th) {
-                            LOGGER.error(FrameworkErrorCode.NetDispatch.getErrCode(), th.getMessage(), th);
+            if (pair != null) {
+                if (pair.getSecond() != null) {
+                    try {
+                        pair.getSecond().execute(() -> {
+                            try {
+                                pair.getFirst().process(ctx, rpcMessage);
+                            } catch (Throwable th) {
+                                LOGGER.error(FrameworkErrorCode.NetDispatch.getErrCode(), th.getMessage(), th);
+                            }
+                        });
+                    } catch (RejectedExecutionException e) {
+                        LOGGER.error(FrameworkErrorCode.ThreadPoolFull.getErrCode(),
+                            "thread pool is full, current max pool size is " + messageExecutor.getActiveCount());
+                        if (allowDumpStack) {
+                            String name = ManagementFactory.getRuntimeMXBean().getName();
+                            String pid = name.split("@")[0];
+                            int idx = new Random().nextInt(100);
+                            try {
+                                Runtime.getRuntime().exec("jstack " + pid + " >d:/" + idx + ".log");
+                            } catch (IOException exx) {
+                                LOGGER.error(exx.getMessage());
+                            }
+                            allowDumpStack = false;
                         }
-                    });
-                } catch (RejectedExecutionException e) {
-                    LOGGER.error(FrameworkErrorCode.ThreadPoolFull.getErrCode(),
-                        "thread pool is full, current max pool size is " + messageExecutor.getActiveCount());
-                    if (allowDumpStack) {
-                        String name = ManagementFactory.getRuntimeMXBean().getName();
-                        String pid = name.split("@")[0];
-                        int idx = new Random().nextInt(100);
-                        try {
-                            Runtime.getRuntime().exec("jstack " + pid + " >d:/" + idx + ".log");
-                        } catch (IOException exx) {
-                            LOGGER.error(exx.getMessage());
-                        }
-                        allowDumpStack = false;
+                    }
+                } else {
+                    try {
+                        pair.getFirst().process(ctx, rpcMessage);
+                    } catch (Throwable th) {
+                        LOGGER.error(FrameworkErrorCode.NetDispatch.getErrCode(), th.getMessage(), th);
                     }
                 }
             } else {
-                try {
-                    pair.getFirst().process(ctx, rpcMessage);
-                } catch (Throwable th) {
-                    LOGGER.error(FrameworkErrorCode.NetDispatch.getErrCode(), th.getMessage(), th);
-                }
+                LOGGER.error("This message type [{}] has no processor.", messageTypeAware.getTypeCode());
             }
         } else {
-            LOGGER.error("This message type [{}] has no processor.", messageTypeAware.getTypeCode());
+            LOGGER.error("This rpcMessage body[{}] is not MessageTypeAware type.", body);
         }
-    } else {
-        LOGGER.error("This rpcMessage body[{}] is not MessageTypeAware type.", body);
     }
-}
 
     /**
      * Gets address from context.
