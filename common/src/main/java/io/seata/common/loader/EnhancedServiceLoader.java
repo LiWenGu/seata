@@ -192,14 +192,22 @@ public class EnhancedServiceLoader {
         private static final String SERVICES_DIRECTORY = "META-INF/services/";
         private static final String SEATA_DIRECTORY = "META-INF/seata/";
 
+        // 存储了所有接口类和对应InnerEnhancedServiceLoader的关系
         private static final ConcurrentMap<Class<?>, InnerEnhancedServiceLoader<?>> SERVICE_LOADERS =
                 new ConcurrentHashMap<>();
-
+        // InnerEnhancedServiceLoader 和接口类 1:1
         private final Class<S> type;
+        //    所有 type 实现类的类描述：
+        //    private String name;
+        //    private Class serviceClass;
+        //    private Integer order;
+        //    private Scope scope;
         private final Holder<List<ExtensionDefinition>> definitionsHolder = new Holder<>();
-        private final ConcurrentMap<ExtensionDefinition, Holder<Object>> definitionToInstanceMap =
-                new ConcurrentHashMap<>();
+        // 用于缓存单例型的实现类实例，懒加载
+        private final ConcurrentMap<ExtensionDefinition, Holder<Object>> definitionToInstanceMap = new ConcurrentHashMap<>();
+        // 用于缓存所有接口名和对应实现类的类描述关系，其中接口名即key 为 LoadLevel.name 参数，表明对于同一个 name，可以有不同的实现
         private final ConcurrentMap<String, List<ExtensionDefinition>> nameToDefinitionsMap = new ConcurrentHashMap<>();
+        // 用户缓存所有接口实现类和对应的类描述关系
         private final ConcurrentMap<Class<?>, ExtensionDefinition> classToDefinitionMap = new ConcurrentHashMap<>();
 
         private InnerEnhancedServiceLoader(Class<S> type) {
@@ -371,6 +379,7 @@ public class EnhancedServiceLoader {
                 throw new EnhancedServiceNotFoundException("not found service provider for : " + type.getName());
             }
             if (Scope.SINGLETON.equals(definition.getScope())) {
+                // 对单例实现类做缓存
                 Holder<Object> holder = CollectionUtils.computeIfAbsent(definitionToInstanceMap, definition,
                     key -> new Holder<>());
                 Object instance = holder.get();
@@ -414,6 +423,12 @@ public class EnhancedServiceLoader {
             return definitions.stream().map(def -> def.getServiceClass()).collect(Collectors.toList());
         }
 
+        /**
+         * 根据对应文件目录查找所有的对应实现类，并将其与实现类描述一一对应
+         * 并包含的由小到大的排序
+         * @param loader
+         * @return
+         */
         @SuppressWarnings("rawtypes")
         private List<ExtensionDefinition> findAllExtensionDefinition(ClassLoader loader) {
             List<ExtensionDefinition> extensionDefinitions = new ArrayList<>();
@@ -463,6 +478,7 @@ public class EnhancedServiceLoader {
                     try (BufferedReader reader = new BufferedReader(new InputStreamReader(url.openStream(), Constants.DEFAULT_CHARSET))) {
                         String line;
                         while ((line = reader.readLine()) != null) {
+                            // 去掉行注释，和尾注释
                             final int ci = line.indexOf('#');
                             if (ci >= 0) {
                                 line = line.substring(0, ci);
@@ -470,6 +486,7 @@ public class EnhancedServiceLoader {
                             line = line.trim();
                             if (line.length() > 0) {
                                 try {
+                                    // 获取所有未加载的类（如果再增加删除不存在的，那就可以可以实现热更新加载了）
                                     ExtensionDefinition extensionDefinition = getUnloadedExtensionDefinition(line, loader);
                                     if (extensionDefinition == null) {
                                         if (LOGGER.isDebugEnabled()) {
@@ -490,8 +507,12 @@ public class EnhancedServiceLoader {
             }
         }
 
+        /**
+         * 根据 LoadLevel 注解生成实现类的类描述，并进行映射
+         */
         private ExtensionDefinition getUnloadedExtensionDefinition(String className, ClassLoader loader)
             throws ClassNotFoundException {
+            // 直接通过对应的map查看是否包含该className即可
             //Check whether the definition has been loaded
             if (!isDefinitionContainsClazz(className, loader)) {
                 Class<?> clazz = Class.forName(className, true, loader);
@@ -527,6 +548,9 @@ public class EnhancedServiceLoader {
             return false;
         }
 
+        /**
+         * 如果有多个实现类，则默认获取最后一个，即order最大的那个实现类
+         */
         private ExtensionDefinition getDefaultExtensionDefinition() {
             List<ExtensionDefinition> currentDefinitions = definitionsHolder.get();
             return CollectionUtils.getLast(currentDefinitions);
@@ -539,7 +563,8 @@ public class EnhancedServiceLoader {
 
         /**
          * init instance
-         *
+         * 先根据参数来调用构造方法（必须要有构造方法）
+         * 再判断是否实现了 initialize，来调用对应的init方法
          * @param implClazz the impl clazz
          * @param argTypes  the arg types
          * @param args      the args

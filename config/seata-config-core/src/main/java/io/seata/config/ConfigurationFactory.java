@@ -15,14 +15,14 @@
  */
 package io.seata.config;
 
-import java.util.Objects;
-
 import io.seata.common.exception.NotSupportYetException;
 import io.seata.common.loader.EnhancedServiceLoader;
 import io.seata.common.loader.EnhancedServiceNotFoundException;
 import io.seata.common.util.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.util.Objects;
 
 /**
  * The type Configuration factory.
@@ -49,21 +49,29 @@ public final class ConfigurationFactory {
     }
 
     private static void load() {
+        // 优先虚拟机变量 seata.config.name 配置属性
         String seataConfigName = System.getProperty(SYSTEM_PROPERTY_SEATA_CONFIG_NAME);
         if (seataConfigName == null) {
+            // 次优先系统变量 SEATA_CONFIG_NAME 配置属性
             seataConfigName = System.getenv(ENV_SEATA_CONFIG_NAME);
         }
         if (seataConfigName == null) {
+            // 默认为 registry
             seataConfigName = REGISTRY_CONF_DEFAULT;
         }
+        // 用于多环境切换配置，优先虚拟机变量 seataEnv
         String envValue = System.getProperty(ENV_PROPERTY_KEY);
         if (envValue == null) {
+            // 次优先级系统变量 SEATA_ENV
             envValue = System.getenv(ENV_SYSTEM_KEY);
         }
+        // 对多环境配置文件拼接，默认没有后缀
         Configuration configuration = (envValue == null) ? new FileConfiguration(seataConfigName,
                 false) : new FileConfiguration(seataConfigName + "-" + envValue, false);
         Configuration extConfiguration = null;
         try {
+            // 目前源码未使用的接口 ExtConfigurationProvider，但是使用方可以实现该接口，实现所有的配置都存储在第三方配置中心上
+            // 个人理解类似 dubbo-admin 元数据的配置中心，适合重度依赖配置中心并方便统一管理和授权配置的客户端应用，一般本地文件配置就够了
             extConfiguration = EnhancedServiceLoader.load(ExtConfigurationProvider.class).provide(configuration);
             if (LOGGER.isInfoEnabled()) {
                 LOGGER.info("load Configuration:{}", extConfiguration == null ? configuration.getClass().getSimpleName()
@@ -74,6 +82,7 @@ public final class ConfigurationFactory {
         } catch (Exception e) {
             LOGGER.error("failed to load extConfiguration:{}", e.getMessage(), e);
         }
+        // 就这样，我们得到了总配置的源
         CURRENT_FILE_INSTANCE = extConfiguration == null ? configuration : extConfiguration;
     }
 
@@ -102,6 +111,7 @@ public final class ConfigurationFactory {
         ConfigType configType;
         String configTypeName;
         try {
+            // 从总配置源中获取配置中心的类型，具体支持种类参见 ConfigType 枚举，key 为 config.type
             configTypeName = CURRENT_FILE_INSTANCE.getConfig(
                     ConfigurationKeys.FILE_ROOT_CONFIG + ConfigurationKeys.FILE_CONFIG_SPLIT_CHAR
                             + ConfigurationKeys.FILE_ROOT_TYPE);
@@ -115,12 +125,15 @@ public final class ConfigurationFactory {
         }
         Configuration extConfiguration = null;
         Configuration configuration;
+        // 默认为文件配置中心
         if (ConfigType.File == configType) {
+            // 拿到文件配置中心的文件，配置 key 为：config.file.name
             String pathDataId = String.join(ConfigurationKeys.FILE_CONFIG_SPLIT_CHAR,
                     ConfigurationKeys.FILE_ROOT_CONFIG, FILE_TYPE, NAME_KEY);
             String name = CURRENT_FILE_INSTANCE.getConfig(pathDataId);
             configuration = new FileConfiguration(name);
             try {
+                // 接下来又判断是否有 ExtConfigurationProvider，通过前面 spi 的分析，如果有多个实现，默认取最后一个实现（Order最大的）
                 extConfiguration = EnhancedServiceLoader.load(ExtConfigurationProvider.class).provide(configuration);
                 if (LOGGER.isInfoEnabled()) {
                     LOGGER.info("load Configuration:{}", extConfiguration == null
@@ -132,11 +145,15 @@ public final class ConfigurationFactory {
                 LOGGER.error("failed to load extConfiguration:{}", e.getMessage(), e);
             }
         } else {
+            // 这里就是具体的 SPI 调用，根据 configType 调用不同的 provider
             configuration = EnhancedServiceLoader
                     .load(ConfigurationProvider.class, Objects.requireNonNull(configType).name()).provide();
         }
         try {
             Configuration configurationCache;
+            // 对 extConfiguration 优先级最高
+            // 同时对配置中心加入了代理，这个动态代理用于代理所有除 getLatestConfig 方法的所有get方法，做缓存处理
+            // 所以当系统启动那一瞬间，第n+1次，就直接从缓存取配置值了
             if (null != extConfiguration) {
                 configurationCache = ConfigurationCache.getInstance().proxy(extConfiguration);
             } else {

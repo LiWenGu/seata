@@ -126,4 +126,10 @@ public class EnhancedServiceLoaderTest {
         }
     }
 
+    @Test
+    public void getInstanceWithInit(){
+        Hello japaneseHelloWithInit = EnhancedServiceLoader.load(Hello.class, "JapaneseHelloWithInit");
+        Assertions.assertEquals(japaneseHelloWithInit.say(), "こんにちは!");
+    }
+
 }

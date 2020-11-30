@@ -130,12 +130,18 @@ public class FileConfiguration extends AbstractConfiguration {
                 new NamedThreadFactory("configOperate", MAX_CONFIG_OPERATE_THREAD));
     }
 
+    /**
+     * 默认为传参为 register 字符串
+     * @param name
+     * @return
+     */
     private File getConfigFile(String name) {
         try {
             if (name == null) {
                 throw new IllegalArgumentException("name can't be null");
             }
             String filePath = null;
+            // 判断是否是 file: 开头，说明是支持绝对路径的
             boolean filePathCustom = name.startsWith(SYS_FILE_RESOURCE_PREFIX);
             if (filePathCustom) {
                 filePath = name.substring(SYS_FILE_RESOURCE_PREFIX.length());
@@ -146,6 +152,7 @@ public class FileConfiguration extends AbstractConfiguration {
             filePath = URLDecoder.decode(filePath, "utf-8");
             File targetFile = new File(filePath);
             if (!targetFile.exists()) {
+                // 判断是否存在符合的几个后缀，分别为：conf properties yml
                 for (String s : FileConfigFactory.getSuffixSet()) {
                     targetFile = new File(filePath + ConfigurationKeys.FILE_CONFIG_SPLIT_CHAR + s);
                     if (targetFile.exists()) {
@@ -286,6 +293,7 @@ public class FileConfiguration extends AbstractConfiguration {
                     return;
                 }
                 try {
+                    // 默认 FileConiguration 是可以动态刷新的
                     if (allowDynamicRefresh) {
                         long tempLastModified = new File(targetFilePath).lastModified();
                         if (tempLastModified > targetFileLastModified) {
@@ -361,6 +369,7 @@ public class FileConfiguration extends AbstractConfiguration {
             while (true) {
                 for (String dataId : dataIdMap.keySet()) {
                     try {
+                        // 不走缓存获取值
                         String currentConfig =
                                 ConfigurationFactory.getInstance().getLatestConfig(dataId, null, DEFAULT_CONFIG_TIMEOUT);
                         if (StringUtils.isNotBlank(currentConfig)) {

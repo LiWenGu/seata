@@ -49,6 +49,26 @@ class FileConfigurationTest {
         });
         System.setProperty("service.disableGlobalTransaction", String.valueOf(!value));
         Assertions.assertTrue(countDownLatch.await(2000, TimeUnit.MILLISECONDS));
+        boolean valueCache = fileConfig.getBoolean("service.disableGlobalTransaction");
+        System.out.println(valueCache);
+
+        fileConfig.addConfigListener("service.disableGlobalTransaction", new ConfigurationChangeListener() {
+            @Override
+            public void beforeEvent() {
+
+            }
+
+            @Override
+            public void onChangeEvent(ConfigurationChangeEvent event) {
+
+            }
+
+            @Override
+            public void afterEvent() {
+
+            }
+
+        });
     }
 
 }

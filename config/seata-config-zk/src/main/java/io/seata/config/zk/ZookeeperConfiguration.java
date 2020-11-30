@@ -216,7 +216,7 @@ public class ZookeeperConfiguration extends AbstractConfiguration {
     @Override
     public Set<ConfigurationChangeListener> getConfigListeners(String dataId) {
         ConcurrentMap<ConfigurationChangeListener, ZKListener> configListeners = configListenersMap.get(dataId);
-        if (CollectionUtils.isNotEmpty(configListeners)) {
+        if (!configListeners.isEmpty()) {
             return configListeners.keySet();
         } else {
             return null;

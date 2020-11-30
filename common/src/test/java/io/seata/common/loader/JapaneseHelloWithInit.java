@@ -13,25 +13,22 @@
  *  See the License for the specific language governing permissions and
  *  limitations under the License.
  */
-package io.seata.discovery.loadbalance;
+package io.seata.common.loader;
 
-import java.util.List;
-import java.util.concurrent.ThreadLocalRandom;
+import io.seata.common.executor.Initialize;
 
-import io.seata.common.loader.LoadLevel;
-import static io.seata.common.DefaultValues.DEFAULT_LOAD_BALANCE;
+@LoadLevel(name = "JapaneseHelloWithInit", order = Integer.MIN_VALUE)
+public class JapaneseHelloWithInit implements Hello, Initialize {
 
-/**
- * The type Random load balance.
- *
- * @author yuoyao
- */
-@LoadLevel(name = DEFAULT_LOAD_BALANCE)
-public class RandomLoadBalance extends AbstractLoadBalance {
+    private String initStr;
 
     @Override
-    protected <T> T doSelect(List<T> invokers, String xid) {
-        int length = invokers.size();
-        return invokers.get(ThreadLocalRandom.current().nextInt(length));
+    public String say() {
+        return initStr;
+    }
+
+    @Override
+    public void init() {
+        initStr = "こんにちは!";
     }
 }
