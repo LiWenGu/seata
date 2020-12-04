@@ -190,7 +190,9 @@ public class RedisTransactionStoreManager extends AbstractTransactionStoreManage
             globalTransactionDO.setGmtCreate(now);
             globalTransactionDO.setGmtModified(now);
             Pipeline pipelined = jedis.pipelined();
+            // 实际存储 key value 为： ("SEATA_GLOBAL_"+transactionId, map(globalTransactionDO))
             pipelined.hmset(globalKey, BeanUtils.objectToMap(globalTransactionDO));
+            // 实际存储 key value 为：("SEATA_STATUS_"+status, xid)
             pipelined.rpush(buildGlobalStatus(globalTransactionDO.getStatus()), globalTransactionDO.getXid());
             pipelined.sync();
             return true;

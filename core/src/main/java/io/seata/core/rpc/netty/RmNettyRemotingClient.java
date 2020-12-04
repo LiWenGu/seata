@@ -268,6 +268,12 @@ public final class RmNettyRemotingClient extends AbstractNettyRemotingClient {
         return transactionServiceGroup;
     }
 
+    /**
+     * 根据不同的命令使用不同的rmhandle处理
+     * 之前在  {@link io.seata.rm.RMClient#init(String, String)} 中的 setResourceManager 已经设置好了，
+     * 这里直接使用 getTransactionMessageHandler() 取出的是一个集合，具体会根据 branchType 类型选择具体的handler
+     * 这里具体处理命令有 提交分支/回滚分支/undo_log删除/响应打印/心跳
+     */
     private void registerProcessor() {
         // 1.registry rm client handle branch commit processor
         RmBranchCommitProcessor rmBranchCommitProcessor = new RmBranchCommitProcessor(getTransactionMessageHandler(), this);

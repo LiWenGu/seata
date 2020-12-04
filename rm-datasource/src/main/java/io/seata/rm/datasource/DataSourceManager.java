@@ -138,6 +138,7 @@ public class DataSourceManager extends AbstractResourceManager implements Initia
     @Override
     public BranchStatus branchCommit(BranchType branchType, String xid, long branchId, String resourceId,
                                      String applicationData) throws TransactionException {
+        // 定时任务批量本地commit，实际为删除 undo_log
         return asyncWorker.branchCommit(branchType, xid, branchId, resourceId, applicationData);
     }
 
@@ -149,6 +150,7 @@ public class DataSourceManager extends AbstractResourceManager implements Initia
             throw new ShouldNeverHappenException();
         }
         try {
+            // 回滚，根据 undo_log 回滚
             UndoLogManagerFactory.getUndoLogManager(dataSourceProxy.getDbType()).undo(dataSourceProxy, xid, branchId);
         } catch (TransactionException te) {
             StackTraceLogger.info(LOGGER, te,

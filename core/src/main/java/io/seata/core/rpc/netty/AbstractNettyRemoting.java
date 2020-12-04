@@ -256,7 +256,7 @@ public abstract class AbstractNettyRemoting implements Disposable {
 
     /**
      * Rpc message processing.
-     *
+     * processorTable 在初始化时通过 registerProcessor 方法已经初始化，对不同的命令有不同的具体处理类
      * @param ctx        Channel handler context.
      * @param rpcMessage rpc message.
      * @throws Exception throws exception process message error.

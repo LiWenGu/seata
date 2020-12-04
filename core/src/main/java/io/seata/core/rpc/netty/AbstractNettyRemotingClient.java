@@ -248,6 +248,12 @@ public abstract class AbstractNettyRemotingClient extends AbstractNettyRemoting 
         return clientChannelManager;
     }
 
+    /**
+     * 根据 group，来做负载均衡，其中 msg 参数是后面加的，获取 xid 后专用于一致性hash负载均衡，其它三个负载均衡无需该参数
+     * @param transactionServiceGroup
+     * @param msg
+     * @return
+     */
     private String loadBalance(String transactionServiceGroup, Object msg) {
         InetSocketAddress address = null;
         try {

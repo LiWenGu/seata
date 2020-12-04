@@ -81,8 +81,9 @@ public class Server {
         nettyRemotingServer.setListenPort(parameterParser.getPort());
         UUIDGenerator.init(parameterParser.getServerNode());
         //log store mode : file, db, redis
+        // 存储全局事务的状态进度等全局信息，Begin Committing Committed Rollbacking 等，具体参见： io.seata.core.model.GlobalStatus
         SessionHolder.init(parameterParser.getStoreMode());
-
+        // 事务协调器，具体操作事务的命令分发，相当于 netty 的 handler 角色
         DefaultCoordinator coordinator = new DefaultCoordinator(nettyRemotingServer);
         coordinator.init();
         nettyRemotingServer.setHandler(coordinator);

@@ -227,11 +227,19 @@ public class DefaultCoordinator extends AbstractTCInboundHandler implements Tran
                         + globalSession.getTimeout());
             }
             boolean shouldTimeout = SessionHolder.lockAndExecute(globalSession, () -> {
+                // 判断是否超时的两个条件，是开始状态或 now-begin>60000ms
                 if (globalSession.getStatus() != GlobalStatus.Begin || !globalSession.isTimeout()) {
                     return false;
                 }
+                /*
+                // 上面的判断代码等同于下面的
+                if (globalSession.getStatus() == GlobalStatus.Begin && globalSession.isTimeout()) {
+                    return false;
+                }
+                */
                 globalSession.addSessionLifecycleListener(SessionHolder.getRootSessionManager());
                 globalSession.close();
+                // 超时回滚
                 globalSession.changeStatus(GlobalStatus.TimeoutRollbacking);
 
                 // transaction timeout and start rollbacking event
@@ -246,7 +254,7 @@ public class DefaultCoordinator extends AbstractTCInboundHandler implements Tran
                 continue;
             }
             LOGGER.info("Global transaction[{}] is timeout and will be rollback.", globalSession.getXid());
-
+            // 增加超时回滚逻辑监听
             globalSession.addSessionLifecycleListener(SessionHolder.getRetryRollbackingSessionManager());
             SessionHolder.getRetryRollbackingSessionManager().addGlobalSession(globalSession);
 
@@ -269,10 +277,13 @@ public class DefaultCoordinator extends AbstractTCInboundHandler implements Tran
         for (GlobalSession rollbackingSession : rollbackingSessions) {
             try {
                 // prevent repeated rollback
+                // 如果当前正在回滚中同时 now-begin < 12000ms，才跳过。
                 if (rollbackingSession.getStatus().equals(GlobalStatus.Rollbacking) && !rollbackingSession.isRollbackingDead()) {
                     continue;
                 }
+                // 默认超过100ms才会重试回滚 now - begin > 100ms
                 if (isRetryTimeout(now, MAX_ROLLBACK_RETRY_TIMEOUT.toMillis(), rollbackingSession.getBeginTime())) {
+                    // 释放掉锁，默认为false
                     if (ROLLBACK_RETRY_TIMEOUT_UNLOCK_ENABLE) {
                         rollbackingSession.clean();
                     }
@@ -284,6 +295,7 @@ public class DefaultCoordinator extends AbstractTCInboundHandler implements Tran
                     continue;
                 }
                 rollbackingSession.addSessionLifecycleListener(SessionHolder.getRootSessionManager());
+                // 实际操作回滚
                 core.doGlobalRollback(rollbackingSession, true);
             } catch (TransactionException ex) {
                 LOGGER.info("Failed to retry rollbacking [{}] {} {}", rollbackingSession.getXid(), ex.getCode(), ex.getMessage());
@@ -375,6 +387,7 @@ public class DefaultCoordinator extends AbstractTCInboundHandler implements Tran
      * Init.
      */
     public void init() {
+        // 回滚重试
         retryRollbacking.scheduleAtFixedRate(() -> {
             try {
                 handleRetryRollbacking();
@@ -382,7 +395,7 @@ public class DefaultCoordinator extends AbstractTCInboundHandler implements Tran
                 LOGGER.info("Exception retry rollbacking ... ", e);
             }
         }, 0, ROLLBACKING_RETRY_PERIOD, TimeUnit.MILLISECONDS);
-
+        // 提交重试
         retryCommitting.scheduleAtFixedRate(() -> {
             try {
                 handleRetryCommitting();
@@ -390,7 +403,7 @@ public class DefaultCoordinator extends AbstractTCInboundHandler implements Tran
                 LOGGER.info("Exception retry committing ... ", e);
             }
         }, 0, COMMITTING_RETRY_PERIOD, TimeUnit.MILLISECONDS);
-
+        // 异步提交
         asyncCommitting.scheduleAtFixedRate(() -> {
             try {
                 handleAsyncCommitting();
@@ -398,7 +411,7 @@ public class DefaultCoordinator extends AbstractTCInboundHandler implements Tran
                 LOGGER.info("Exception async committing ... ", e);
             }
         }, 0, ASYNC_COMMITTING_RETRY_PERIOD, TimeUnit.MILLISECONDS);
-
+        // 超时检查
         timeoutCheck.scheduleAtFixedRate(() -> {
             try {
                 timeoutCheck();
@@ -406,7 +419,7 @@ public class DefaultCoordinator extends AbstractTCInboundHandler implements Tran
                 LOGGER.info("Exception timeout checking ... ", e);
             }
         }, 0, TIMEOUT_RETRY_PERIOD, TimeUnit.MILLISECONDS);
-
+        // undolog 日志删除
         undoLogDelete.scheduleAtFixedRate(() -> {
             try {
                 undoLogDelete();

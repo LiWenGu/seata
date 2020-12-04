@@ -46,15 +46,19 @@ public class MetricsManager {
     }
 
     public void init() {
+        // 配置中心的 metrics.enabled 开启
         boolean enabled = ConfigurationFactory.getInstance().getBoolean(
             ConfigurationKeys.METRICS_PREFIX + ConfigurationKeys.METRICS_ENABLED, false);
         if (enabled) {
+            // 当前只有一个 compact
             registry = RegistryFactory.getInstance();
             if (registry != null) {
+                // 当前只支持 prrometheus
                 List<Exporter> exporters = ExporterFactory.getInstanceList();
                 //only at least one metrics exporter implement had imported in pom then need register MetricsSubscriber
                 if (exporters.size() != 0) {
                     exporters.forEach(exporter -> exporter.setRegistry(registry));
+                    // 使用 guava 的事件总线机制收集和消费事件
                     EventBusManager.get().register(new MetricsSubscriber(registry));
                 }
             }

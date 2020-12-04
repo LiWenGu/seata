@@ -110,6 +110,7 @@ public class ClientOnResponseProcessor implements RemotingProcessor {
                 messageFuture.setResultMessage(rpcMessage.getBody());
             } else {
                 if (rpcMessage.getBody() instanceof AbstractResultMessage) {
+                    // TM 为null
                     if (transactionMessageHandler != null) {
                         transactionMessageHandler.onResponse((AbstractResultMessage) rpcMessage.getBody(), null);
                     }

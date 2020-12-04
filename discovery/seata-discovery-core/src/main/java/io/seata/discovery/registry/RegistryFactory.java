@@ -49,10 +49,12 @@ public class RegistryFactory {
 
     private static RegistryService buildRegistryService() {
         RegistryType registryType;
+        // 从总配置源获取 registry.type 值
         String registryTypeName = ConfigurationFactory.CURRENT_FILE_INSTANCE.getConfig(
             ConfigurationKeys.FILE_ROOT_REGISTRY + ConfigurationKeys.FILE_CONFIG_SPLIT_CHAR
                 + ConfigurationKeys.FILE_ROOT_TYPE);
         try {
+            // 支持类型枚举 RegistryType
             registryType = RegistryType.getType(registryTypeName);
         } catch (Exception exx) {
             throw new NotSupportYetException("not support registry type: " + registryTypeName);
@@ -60,6 +62,7 @@ public class RegistryFactory {
         if (RegistryType.File == registryType) {
             return FileRegistryServiceImpl.getInstance();
         } else {
+            // SPI 获取具体实现类
             return EnhancedServiceLoader.load(RegistryProvider.class, Objects.requireNonNull(registryType).name()).provide();
         }
     }

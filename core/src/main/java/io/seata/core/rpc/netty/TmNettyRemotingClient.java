@@ -220,6 +220,9 @@ public final class TmNettyRemotingClient extends AbstractNettyRemotingClient {
         };
     }
 
+    /**
+     * TM 的接收命令处理器，没有使用子线程
+     */
     private void registerProcessor() {
         // 1.registry TC response processor
         ClientOnResponseProcessor onResponseProcessor =

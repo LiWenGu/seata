@@ -36,6 +36,7 @@ public class ExporterFactory {
 
     public static List<Exporter> getInstanceList() {
         List<Exporter> exporters = new ArrayList<>();
+        // 输出 metrics.exporterList，使用逗号分隔，目前只支持 prometheus，具体支持类型参考：ExporterType 枚举
         String exporterTypeNameList = ConfigurationFactory.getInstance().getConfig(
             ConfigurationKeys.METRICS_PREFIX + ConfigurationKeys.METRICS_EXPORTER_LIST, null);
         if (!StringUtils.isNullOrEmpty(exporterTypeNameList)) {

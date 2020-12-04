@@ -31,6 +31,7 @@ import io.seata.core.constants.ConfigurationKeys;
 public class RegistryFactory {
     public static Registry getInstance() {
         RegistryType registryType;
+        // metrics.registryType，目前只支持 compact
         String registryTypeName = ConfigurationFactory.getInstance().getConfig(
             ConfigurationKeys.METRICS_PREFIX + ConfigurationKeys.METRICS_REGISTRY_TYPE, null);
         if (!StringUtils.isNullOrEmpty(registryTypeName)) {

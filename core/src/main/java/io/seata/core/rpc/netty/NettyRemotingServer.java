@@ -84,13 +84,20 @@ public class NettyRemotingServer extends AbstractNettyRemotingServer {
         channel.close();
     }
 
+    /**
+     * handler 实际处理类为 DefaultCoordinator。
+     */
     private void registerProcessor() {
         // 1. registry on request message processor
         ServerOnRequestProcessor onRequestProcessor =
             new ServerOnRequestProcessor(this, getHandler());
+        // 接收分支注册请求
         super.registerProcessor(MessageType.TYPE_BRANCH_REGISTER, onRequestProcessor, messageExecutor);
+        // 接收分支状态
         super.registerProcessor(MessageType.TYPE_BRANCH_STATUS_REPORT, onRequestProcessor, messageExecutor);
+        // 全局事务开始
         super.registerProcessor(MessageType.TYPE_GLOBAL_BEGIN, onRequestProcessor, messageExecutor);
+        // 全局事务提交
         super.registerProcessor(MessageType.TYPE_GLOBAL_COMMIT, onRequestProcessor, messageExecutor);
         super.registerProcessor(MessageType.TYPE_GLOBAL_LOCK_QUERY, onRequestProcessor, messageExecutor);
         super.registerProcessor(MessageType.TYPE_GLOBAL_REPORT, onRequestProcessor, messageExecutor);

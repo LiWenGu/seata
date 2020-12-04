@@ -175,6 +175,7 @@ public class ZookeeperRegisterServiceImpl implements RegistryService<IZkChildLis
      */
     @Override
     public List<InetSocketAddress> lookup(String key) throws Exception {
+        // 从总配置中心中获取集群名称
         String clusterName = getServiceGroup(key);
 
         if (clusterName == null) {
@@ -184,6 +185,7 @@ public class ZookeeperRegisterServiceImpl implements RegistryService<IZkChildLis
         return doLookup(clusterName);
     }
 
+    // 从服务发现组件中得到该集群下的所有服务列表，接下来就要去负载均衡了
     // visible for test.
     List<InetSocketAddress> doLookup(String clusterName) throws Exception {
         boolean exist = getClientInstance().exists(ROOT_PATH + clusterName);

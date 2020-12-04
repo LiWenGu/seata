@@ -112,6 +112,7 @@ public class AsyncWorker implements ResourceManagerInbound {
     @Override
     public BranchStatus branchCommit(BranchType branchType, String xid, long branchId, String resourceId,
                                      String applicationData) throws TransactionException {
+        // AT-client 接收到 commit command，进阻塞队列
         if (!ASYNC_COMMIT_BUFFER.offer(new Phase2Context(branchType, xid, branchId, resourceId, applicationData))) {
             LOGGER.warn("Async commit buffer is FULL. Rejected branch [{}/{}] will be handled by housekeeping later.", branchId, xid);
         }
@@ -123,6 +124,7 @@ public class AsyncWorker implements ResourceManagerInbound {
      */
     public synchronized void init() {
         LOGGER.info("Async Commit Buffer Limit: {}", ASYNC_COMMIT_BUFFER_LIMIT);
+        // 异步批量commit任务，1s执行一次commit操作
         ScheduledExecutorService timerExecutor = new ScheduledThreadPoolExecutor(1, new NamedThreadFactory("AsyncWorker", 1, true));
         timerExecutor.scheduleAtFixedRate(() -> {
             try {
@@ -145,6 +147,7 @@ public class AsyncWorker implements ResourceManagerInbound {
         List<Phase2Context> contextsGroupedByResourceId;
         while (!ASYNC_COMMIT_BUFFER.isEmpty()) {
             Phase2Context commitContext = ASYNC_COMMIT_BUFFER.poll();
+            // 根据 resourceId 分组
             contextsGroupedByResourceId = CollectionUtils.computeIfAbsent(mappedContexts, commitContext.resourceId, key -> new ArrayList<>());
             contextsGroupedByResourceId.add(commitContext);
         }

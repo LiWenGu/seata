@@ -32,7 +32,10 @@ public class RMClient {
      */
     public static void init(String applicationId, String transactionServiceGroup) {
         RmNettyRemotingClient rmNettyRemotingClient = RmNettyRemotingClient.getInstance(applicationId, transactionServiceGroup);
+        // 支持 AT TCC SAGA XA 四种 reousrce manager，
+        // 其中SPI接口为：io.seata.core.model.ResourceManager。AT和XA在rm-datasource模块定义，saga在seata-saga-rm模块定义，tcc在seata-tcc模块定义
         rmNettyRemotingClient.setResourceManager(DefaultResourceManager.get());
+        // 其中SPI接口为：io.seata.rm.AbstractRMHandler。支持 AT TCC SAGA XA 四种 rmhandle，具体定义位置和 resourceManager一样
         rmNettyRemotingClient.setTransactionMessageHandler(DefaultRMHandler.get());
         rmNettyRemotingClient.init();
     }
