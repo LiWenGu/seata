@@ -142,6 +142,9 @@ public class DataSourceManager extends AbstractResourceManager implements Initia
         return asyncWorker.branchCommit(branchType, xid, branchId, resourceId, applicationData);
     }
 
+    /**
+     * RM 执行回滚，返回 TC 相关的响应命令
+     */
     @Override
     public BranchStatus branchRollback(BranchType branchType, String xid, long branchId, String resourceId,
                                        String applicationData) throws TransactionException {
@@ -157,11 +160,14 @@ public class DataSourceManager extends AbstractResourceManager implements Initia
                 "branchRollback failed. branchType:[{}], xid:[{}], branchId:[{}], resourceId:[{}], applicationData:[{}]. reason:[{}]",
                 new Object[]{branchType, xid, branchId, resourceId, applicationData, te.getMessage()});
             if (te.getCode() == TransactionExceptionCode.BranchRollbackFailed_Unretriable) {
+                // 3. 回滚失败，不需要重试
                 return BranchStatus.PhaseTwo_RollbackFailed_Unretryable;
             } else {
+                // 2. 回滚失败，需要重试
                 return BranchStatus.PhaseTwo_RollbackFailed_Retryable;
             }
         }
+        // 1. 回滚成功
         return BranchStatus.PhaseTwo_Rollbacked;
 
     }

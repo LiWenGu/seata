@@ -177,6 +177,7 @@ public class ConnectionProxy extends AbstractConnectionProxy {
         context.appendLockKey(lockKey);
     }
 
+    // 业务代码最终落库 commit 逻辑代理
     @Override
     public void commit() throws SQLException {
         try {
@@ -195,6 +196,8 @@ public class ConnectionProxy extends AbstractConnectionProxy {
     }
 
     private void doCommit() throws SQLException {
+        // 判断当前上下文是否存在 xid，注意：如果是经过 http/rpc 等，可以参见 integration 模块，里面继承了 dubbo motan sofa grpc 等传递 xid
+        // 子事务就会得到 xid
         if (context.inGlobalTransaction()) {
             processGlobalTransactionCommit();
         } else if (context.isGlobalLockRequire()) {
@@ -216,12 +219,15 @@ public class ConnectionProxy extends AbstractConnectionProxy {
 
     private void processGlobalTransactionCommit() throws SQLException {
         try {
+            // 子事务先注册当前 RM 分支
             register();
         } catch (TransactionException e) {
             recognizeLockKeyConflictException(e, context.buildLockKeys());
         }
         try {
+            // 子事务插入 undo_logs 日志
             UndoLogManagerFactory.getUndoLogManager(this.getDbType()).flushUndoLogs(this);
+            // 子事务本地提交，注意，即时全局事务没提交，此时子事务数据库已经持久化了。因此如果需要读隔离的需要额外的操作
             targetConnection.commit();
         } catch (Throwable ex) {
             LOGGER.error("process connectionProxy commit error: {}", ex.getMessage(), ex);

@@ -150,9 +150,17 @@ public class DefaultCoordinator extends AbstractTCInboundHandler implements Tran
         this.core = new DefaultCore(remotingServer);
     }
 
+    /**
+     *
+     * @param request    the request  TM 的 begin 请求
+     * @param response   the response 响应给 TM 的 begin 响应
+     * @param rpcContext the rpc context 存放当前 channel 通信上下文信息
+     * @throws TransactionException
+     */
     @Override
     protected void doGlobalBegin(GlobalBeginRequest request, GlobalBeginResponse response, RpcContext rpcContext)
         throws TransactionException {
+        // begin 响应返回当前的 xid
         response.setXid(core.begin(rpcContext.getApplicationId(), rpcContext.getTransactionServiceGroup(),
             request.getTransactionName(), request.getTimeout()));
         if (LOGGER.isInfoEnabled()) {
@@ -227,16 +235,10 @@ public class DefaultCoordinator extends AbstractTCInboundHandler implements Tran
                         + globalSession.getTimeout());
             }
             boolean shouldTimeout = SessionHolder.lockAndExecute(globalSession, () -> {
-                // 判断是否超时的两个条件，是开始状态或 now-begin>60000ms
+                // 不是 begin，或 没有timeout
                 if (globalSession.getStatus() != GlobalStatus.Begin || !globalSession.isTimeout()) {
                     return false;
                 }
-                /*
-                // 上面的判断代码等同于下面的
-                if (globalSession.getStatus() == GlobalStatus.Begin && globalSession.isTimeout()) {
-                    return false;
-                }
-                */
                 globalSession.addSessionLifecycleListener(SessionHolder.getRootSessionManager());
                 globalSession.close();
                 // 超时回滚
@@ -256,6 +258,7 @@ public class DefaultCoordinator extends AbstractTCInboundHandler implements Tran
             LOGGER.info("Global transaction[{}] is timeout and will be rollback.", globalSession.getXid());
             // 增加超时回滚逻辑监听
             globalSession.addSessionLifecycleListener(SessionHolder.getRetryRollbackingSessionManager());
+            // 加入到重试回滚中，后面被 io.seata.server.coordinator.DefaultCoordinator.handleRetryRollbacking 取出
             SessionHolder.getRetryRollbackingSessionManager().addGlobalSession(globalSession);
 
         }
@@ -269,6 +272,7 @@ public class DefaultCoordinator extends AbstractTCInboundHandler implements Tran
      * Handle retry rollbacking.
      */
     protected void handleRetryRollbacking() {
+        // 取出所有要重试回滚的
         Collection<GlobalSession> rollbackingSessions = SessionHolder.getRetryRollbackingSessionManager().allSessions();
         if (CollectionUtils.isEmpty(rollbackingSessions)) {
             return;

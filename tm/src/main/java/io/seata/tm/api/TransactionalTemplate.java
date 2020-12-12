@@ -119,14 +119,17 @@ public class TransactionalTemplate {
             try {
                 // 2. If the tx role is 'GlobalTransactionRole.Launcher', send the request of beginTransaction to TC,
                 //    else do nothing. Of course, the hooks will still be triggered.
+                // 刚刚分析的 begin 操作
                 beginTransaction(txInfo, tx);
 
                 Object rs;
                 try {
                     // Do Your Business
+                    // 业务执行
                     rs = business.execute();
                 } catch (Throwable ex) {
                     // 3. The needed business exception to rollback.
+                    // 如果是需要捕获并回滚的业务异常，则执行回滚操作，否则执行提交操作
                     completeTransactionAfterThrowing(txInfo, tx, ex);
                     throw ex;
                 }
@@ -174,8 +177,10 @@ public class TransactionalTemplate {
 
     private void completeTransactionAfterThrowing(TransactionInfo txInfo, GlobalTransaction tx, Throwable originalException) throws TransactionalExecutor.ExecutionException {
         //roll back
+        // 根据注解信息判断当前异常是否是需要回滚的异常
         if (txInfo != null && txInfo.rollbackOn(originalException)) {
             try {
+                // 回滚异常事务回滚
                 rollbackTransaction(tx, originalException);
             } catch (TransactionException txe) {
                 // Failed to rollback
@@ -184,6 +189,7 @@ public class TransactionalTemplate {
             }
         } else {
             // not roll back on this exception, so commit
+            // 提交事务
             commitTransaction(tx);
         }
     }

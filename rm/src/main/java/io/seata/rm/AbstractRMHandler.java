@@ -57,6 +57,11 @@ public abstract class AbstractRMHandler extends AbstractExceptionHandler
         return response;
     }
 
+    /**
+     * RM 收到 TC 的回滚命令，对本地事务做回滚操作
+     * @param request the request
+     * @return
+     */
     @Override
     public BranchRollbackResponse handle(BranchRollbackRequest request) {
         BranchRollbackResponse response = new BranchRollbackResponse();

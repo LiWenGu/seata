@@ -138,12 +138,14 @@ public abstract class AbstractNettyRemotingClient extends AbstractNettyRemoting 
 
     @Override
     public Object sendSyncRequest(Object msg) throws TimeoutException {
+        // 根据配置中心的 group，去注册中心查找对应的TC列表并负载，其中比较特殊的一致性hash算法是根据 msg.xid 负载
         String serverAddress = loadBalance(getTransactionServiceGroup(), msg);
         int timeoutMillis = NettyClientConfig.getRpcRequestTimeout();
         RpcMessage rpcMessage = buildRequestMessage(msg, ProtocolConstants.MSGTYPE_RESQUEST_SYNC);
 
         // send batch message
         // put message into basketMap, @see MergedSendRunnable
+        // 批量发送任务其中等待1ms死循环
         if (NettyClientConfig.isEnableClientBatchSendRequest()) {
 
             // send batch message is sync request, needs to create messageFuture and put it in futures.
@@ -153,12 +155,14 @@ public abstract class AbstractNettyRemotingClient extends AbstractNettyRemoting 
             futures.put(rpcMessage.getId(), messageFuture);
 
             // put message into basketMap
+            // key 为TC地址，value为阻塞队列，阻塞队列存放待发送消息，可以理解为生产者消费者模式，其中的中介就是该 basketMap，生产者存，消费者取
             BlockingQueue<RpcMessage> basket = CollectionUtils.computeIfAbsent(basketMap, serverAddress,
                 key -> new LinkedBlockingQueue<>());
             basket.offer(rpcMessage);
             if (LOGGER.isDebugEnabled()) {
                 LOGGER.debug("offer message: {}", rpcMessage.getBody());
             }
+            // 与消费者通信的变量，使用notify wait机制
             if (!isSending) {
                 synchronized (mergeLock) {
                     mergeLock.notifyAll();
@@ -166,6 +170,8 @@ public abstract class AbstractNettyRemotingClient extends AbstractNettyRemoting 
             }
 
             try {
+                // 这里 messageFuture 在 响应时会塞入结果，io.seata.core.rpc.processor.client.ClientOnResponseProcessor.process 处理 TC response，并塞入结果
+                // 这里会阻塞异步等待
                 return messageFuture.get(timeoutMillis, TimeUnit.MILLISECONDS);
             } catch (Exception exx) {
                 LOGGER.error("wait response error:{},ip:{},request:{}",
@@ -178,6 +184,7 @@ public abstract class AbstractNettyRemotingClient extends AbstractNettyRemoting 
             }
 
         } else {
+            // 直接异步请求
             Channel channel = clientChannelManager.acquireChannel(serverAddress);
             return super.sendSync(channel, rpcMessage, timeoutMillis);
         }

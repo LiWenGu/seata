@@ -139,6 +139,7 @@ public class DataSourceProxy extends AbstractDataSourceProxy implements Resource
         return dbType;
     }
 
+    // 返回代理的 DataSourceProxy 获取的连接池也是经过代理连接池
     @Override
     public ConnectionProxy getConnection() throws SQLException {
         Connection targetConnection = targetDataSource.getConnection();

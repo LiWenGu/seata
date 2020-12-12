@@ -97,6 +97,7 @@ public class DefaultGlobalTransaction implements GlobalTransaction {
             return;
         }
         assertXIDNull();
+        // 查看上下文是否有 xid
         String currentXid = RootContext.getXID();
         if (currentXid != null) {
             throw new IllegalStateException("Global transaction already exists," +
@@ -104,14 +105,17 @@ public class DefaultGlobalTransaction implements GlobalTransaction {
         }
         xid = transactionManager.begin(null, null, name, timeout);
         status = GlobalStatus.Begin;
+        // 绑定 xid 到上下文
         RootContext.bind(xid);
         if (LOGGER.isInfoEnabled()) {
             LOGGER.info("Begin new global transaction [{}]", xid);
         }
     }
 
+    // 此时 TM 已经注册分支到 TC，同时 TM 也执行了事务 local commit，就走到了该步骤：RM Launcher 执行 global commit
     @Override
     public void commit() throws TransactionException {
+        // RM 的 begin commit rollback 操作只会让 Launcher 角色调用
         if (role == GlobalTransactionRole.Participant) {
             // Participant has no responsibility of committing
             if (LOGGER.isDebugEnabled()) {
@@ -144,8 +148,12 @@ public class DefaultGlobalTransaction implements GlobalTransaction {
         }
     }
 
+    /**
+     * TM 执行回滚逻辑
+     */
     @Override
     public void rollback() throws TransactionException {
+        // 参与者不能回滚
         if (role == GlobalTransactionRole.Participant) {
             // Participant has no responsibility of rollback
             if (LOGGER.isDebugEnabled()) {
@@ -153,12 +161,14 @@ public class DefaultGlobalTransaction implements GlobalTransaction {
             }
             return;
         }
+        // 主导者回滚时，xid 肯定有
         assertXIDNotNull();
-
+        // 默认回滚重试5次
         int retry = ROLLBACK_RETRY_COUNT <= 0 ? DEFAULT_TM_ROLLBACK_RETRY_COUNT : ROLLBACK_RETRY_COUNT;
         try {
             while (retry > 0) {
                 try {
+                    // 异步调用 TC 执行回滚操作
                     status = transactionManager.rollback(xid);
                     break;
                 } catch (Throwable ex) {

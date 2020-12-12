@@ -120,14 +120,18 @@ public class DefaultCore implements Core {
         return getCore(branchSession.getBranchType()).branchRollback(globalSession, branchSession);
     }
 
+    /**
+     * 实际生成 xid，并保存至一致性存储服务中
+     */
     @Override
     public String begin(String applicationId, String transactionServiceGroup, String name, int timeout)
         throws TransactionException {
+        // 生成 xid，格式：ipAddress + ":" + port + ":" + tranId，其中 tranId 是雪花算法生成
         GlobalSession session = GlobalSession.createGlobalSession(applicationId, transactionServiceGroup, name,
             timeout);
         // sessionManager 设置监听
         session.addSessionLifecycleListener(SessionHolder.getRootSessionManager());
-        // globalsessioon 开启
+        // 存入 SessionManager 一致性服务，
         session.begin();
 
         // metrics transaction begin 事件发送
@@ -138,6 +142,7 @@ public class DefaultCore implements Core {
         return session.getXid();
     }
 
+    // TC 接收到 commit 请求
     @Override
     public GlobalStatus commit(String xid) throws TransactionException {
         GlobalSession globalSession = SessionHolder.findGlobalSession(xid);
@@ -151,6 +156,7 @@ public class DefaultCore implements Core {
             // Highlight: Firstly, close the session, then no more branch can be registered.
             globalSession.closeAndClean();
             if (globalSession.getStatus() == GlobalStatus.Begin) {
+                // 正常阶段 AT 模式允许异步提交，加入 TC 的定时任务中，默认1s刷一次
                 if (globalSession.canBeCommittedAsync()) {
                     globalSession.asyncCommit();
                     return false;
@@ -163,8 +169,10 @@ public class DefaultCore implements Core {
         });
 
         if (shouldCommit) {
+            // 同步提交
             boolean success = doGlobalCommit(globalSession, false);
-            if (success && !globalSession.getBranchSessions().isEmpty()) {
+            //If successful and all remaining branches can be committed asynchronously, do async commit.
+            if (success && globalSession.hasBranch() && globalSession.canBeCommittedAsync()) {
                 globalSession.asyncCommit();
                 return GlobalStatus.Committed;
             } else {
@@ -237,11 +245,14 @@ public class DefaultCore implements Core {
                     }
                 }
             }
-            if (globalSession.hasBranch()) {
+            //If has branch and not all remaining branches can be committed asynchronously,
+            //do print log and return false
+            if (globalSession.hasBranch() && !globalSession.canBeCommittedAsync()) {
                 LOGGER.info("Committing global transaction is NOT done, xid = {}.", globalSession.getXid());
                 return false;
             }
         }
+        //If success and there is no branch, end the global transaction.
         if (success && globalSession.getBranchSessions().isEmpty()) {
             SessionHelper.endCommitted(globalSession);
 
@@ -263,6 +274,7 @@ public class DefaultCore implements Core {
         }
         globalSession.addSessionLifecycleListener(SessionHolder.getRootSessionManager());
         // just lock changeStatus
+        // 只有状态为 begin 情况下，才会执行回滚
         boolean shouldRollBack = SessionHolder.lockAndExecute(globalSession, () -> {
             globalSession.close(); // Highlight: Firstly, close the session, then no more branch can be registered.
             if (globalSession.getStatus() == GlobalStatus.Begin) {
@@ -279,16 +291,25 @@ public class DefaultCore implements Core {
         return globalSession.getStatus();
     }
 
+    /**
+     * TC 的回滚具体逻辑，被两种场景调用，一是TM主动调用回滚，二是TC定时任务遍历自我调用回滚
+     * @param globalSession the global session
+     * @param retrying      the retrying
+     * @return
+     * @throws TransactionException
+     */
     @Override
     public boolean doGlobalRollback(GlobalSession globalSession, boolean retrying) throws TransactionException {
         boolean success = true;
         // start rollback event
+        // metrics 发送回滚开始事件
         eventBus.post(new GlobalTransactionEvent(globalSession.getTransactionId(), GlobalTransactionEvent.ROLE_TC,
             globalSession.getTransactionName(), globalSession.getBeginTime(), null, globalSession.getStatus()));
-
+        // saga 暂时不分析
         if (globalSession.isSaga()) {
             success = getCore(BranchType.SAGA).doGlobalRollback(globalSession, retrying);
         } else {
+            // 从 当前 SessionManager 获取所有注册该全局事务下的分支
             for (BranchSession branchSession : globalSession.getReverseSortedBranches()) {
                 BranchStatus currentBranchStatus = branchSession.getStatus();
                 if (currentBranchStatus == BranchStatus.PhaseOne_Failed) {
@@ -296,12 +317,15 @@ public class DefaultCore implements Core {
                     continue;
                 }
                 try {
+                    // 注册分支遍历回滚
                     BranchStatus branchStatus = branchRollback(globalSession, branchSession);
                     switch (branchStatus) {
+                        // 1. 回滚成功
                         case PhaseTwo_Rollbacked:
                             globalSession.removeBranch(branchSession);
                             LOGGER.info("Rollback branch transaction successfully, xid = {} branchId = {}", globalSession.getXid(), branchSession.getBranchId());
                             continue;
+                        // 3. 回滚失败，不可恢复的事务，停止回滚，目前代码没有地方抛出该异常的地方，一般出现异常都是走 default 逻辑
                         case PhaseTwo_RollbackFailed_Unretryable:
                             SessionHelper.endRollbackFailed(globalSession);
                             LOGGER.info("Rollback branch transaction fail and stop retry, xid = {} branchId = {}", globalSession.getXid(), branchSession.getBranchId());
@@ -309,6 +333,7 @@ public class DefaultCore implements Core {
                         default:
                             LOGGER.info("Rollback branch transaction fail and will retry, xid = {} branchId = {}", globalSession.getXid(), branchSession.getBranchId());
                             if (!retrying) {
+                                // 2. 回滚失败，需要重试，放入重试定时任务队列
                                 globalSession.queueToRetryRollback();
                             }
                             return false;
